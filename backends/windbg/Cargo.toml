@@ -1,0 +1,19 @@
+[package]
+name = "ghidradbg-backend-windbg"
+version = "0.1.0"
+authors = ["Gary Tierney <gary.tierney@fastmail.com>"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1.0.34"
+async-trait = "0.1.41"
+ghidradbg-backend = { path = "../../ghidradbg_backend" }
+bitflags = "1.2.1"
+bytes = "0.5.0"
+winapi = { path = "C:/Users/Gary Tierney/CLionProjects/winapi-rs", features = ["errhandlingapi", "unknwnbase", "dbgeng", "combaseapi", "objbase", "winerror"] }
+futures = "0.3.5"
+log = "0.4.11"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0.20"
+tokio = { version = "0.2.22", features = ["full"] }
