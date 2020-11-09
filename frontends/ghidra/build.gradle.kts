@@ -4,10 +4,13 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     kotlin("jvm") version "1.4.10"
     kotlin("plugin.serialization") version "1.4.10"
+    id("com.github.johnrengelman.shadow") version "6.1.0"
     id("cargo")
 }
 
 val ghidraInstallationDir: String by project
+
+apply(from = "$ghidraInstallationDir/support/buildExtension.gradle")
 
 cargo {
     cratePath = "${rootDir}/../../"
@@ -50,7 +53,29 @@ tasks {
             }
         }
     }
+
+    getByName<Jar>("shadowJar") {
+        exclude { entry ->
+            entry.file != null && entry.file.absoluteFile.startsWith(ghidraInstallationDir) ?: false
+        }
+
+        archiveClassifier.set("shadow")
+        isZip64 = true
+    }
+
+    getByName<Zip>("buildExtension") {
+        exclude { entry ->
+            entry.file in getByName<Jar>("jar").outputs.files
+        }
+
+        from(getByName<Jar>("shadowJar")) {
+            into("${project.name}/lib")
+        }
+
+        dependsOn("shadowJar")
+    }
 }
+
 
 fun platformName(): String {
     val os = System.getProperty("os.name")

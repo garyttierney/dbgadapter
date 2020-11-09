@@ -35,5 +35,11 @@ jobs:
         shell: bash
 
       - name: Build with Gradle
-        run: (cd frontends/ghidra && ./gradlew -PghidraInstallationDir="${{ github.workspace }}/ghidra_9.2_DEV" build )
+        run: (cd frontends/ghidra && ./gradlew -PghidraInstallationDir="${{ github.workspace }}/ghidra_9.2_DEV" buildExtension)
         shell: bash
+
+      - name: Upload Ghidra plugin
+        uses: actions/upload-artifact@v2
+        with:
+          name: ghidradbg-plugin
+          path: frontends/ghidra/dist/*.zip
