@@ -35,4 +35,5 @@ jobs:
         shell: bash
 
       - name: Build with Gradle
-        run: (cd frontends/ghidra && ./gradlew build -PGHIDRA_INSTALLATION_DIR=./ghidra_9.2_DEV)
+        run: (cd frontends/ghidra && ./gradlew -PghidraInstallationDir="${{ github.workspace }}/ghidra_9.2_DEV" build )
+        shell: bash
