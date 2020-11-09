@@ -30,7 +30,7 @@ jobs:
 
       - name: Download Ghidra
         run: |
-          wget https://ghidradistribution.z35.web.core.windows.net/builds/ghidra-windows-latest.zip -O ghidra.zip
+          curl https://ghidradistribution.z35.web.core.windows.net/builds/ghidra-windows-latest.zip -o ghidra.zip
           unzip ghidra.zip
         shell: bash
 
