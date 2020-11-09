@@ -28,5 +28,10 @@ jobs:
         with:
           java-version: 11
 
+      - name: Download Ghidra
+        run: |
+          wget https://ghidradistribution.z35.web.core.windows.net/builds/ghidra-windows-latest.zip -O ghidra.zip
+          unzip ghidra.zip
+
       - name: Build with Gradle
-        run: (cd frontends/ghidra && ./gradlew build)
+        run: (cd frontends/ghidra && ./gradlew build -PGHIDRA_INSTALLATION_DIR=./ghidra_9.2_DEV)
