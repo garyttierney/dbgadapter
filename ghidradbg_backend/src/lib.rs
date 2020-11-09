@@ -31,8 +31,10 @@ pub enum DebuggerError {
 pub trait Debugger: Sized {
     async fn launch(cli: String) -> Result<Self>;
 
-    async fn handle_command(&mut self, command: DebuggerCommandRequest) -> Result<DebuggerCommandResponse>;
+    async fn handle_command(
+        &mut self,
+        command: DebuggerCommandRequest,
+    ) -> Result<DebuggerCommandResponse>;
 
     async fn next_event(&mut self) -> Result<DebuggerEvent>;
 }
-

@@ -1,11 +1,10 @@
-
 use winapi::shared::winerror::S_OK;
 use winapi::{
     shared::winerror::FAILED, um::dbgeng::IDebugRegisters2, um::dbgeng::DEBUG_REGISTER_DESCRIPTION,
     um::dbgeng::DEBUG_VALUE,
 };
 
-use ghidradbg_backend::state::{Register};
+use ghidradbg_backend::state::{Register, Value};
 
 use super::WinDbgError;
 
@@ -69,9 +68,9 @@ impl<'a> Registers<'a> {
                     ));
                 }
 
-                // if desc.SubregMaster != 0 {
-                //     continue;
-                // }
+                if desc.SubregMaster != 0 {
+                    continue;
+                }
 
                 let mut value: DEBUG_VALUE = std::mem::zeroed();
                 let res = self.inner.GetValue(register, &mut value as *mut _);
@@ -80,7 +79,7 @@ impl<'a> Registers<'a> {
                     return Err(WinDbgError::FfiError("Unable to get register value", res));
                 }
 
-                let raw_value = value.u.RawBytes().to_vec();
+                let raw_value = value.u.RawBytes();
 
                 registers.push(Register {
                     name: std::ffi::CStr::from_bytes_with_nul(&name_buf[..name_len as usize])
@@ -88,7 +87,7 @@ impl<'a> Registers<'a> {
                         .map_err(|_| WinDbgError::UnknownError)?
                         .to_string(),
                     index: register,
-                    data: raw_value,
+                    value: Value::new(raw_value),
                 })
             }
 

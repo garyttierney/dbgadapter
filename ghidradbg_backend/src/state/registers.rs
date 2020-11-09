@@ -1,8 +1,10 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+
+use crate::state::Value;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Register {
     pub name: String,
     pub index: u32,
-    pub data: Vec<u8>,
+    pub value: Value,
 }

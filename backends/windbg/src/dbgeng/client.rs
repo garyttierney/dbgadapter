@@ -4,18 +4,19 @@ use std::os::windows::ffi::OsStrExt;
 use tokio::sync::mpsc::{channel, Receiver};
 use winapi::ctypes::c_void;
 use winapi::shared::guiddef::IID;
-use winapi::shared::winerror::{S_OK, S_FALSE};
+use winapi::shared::winerror::{S_FALSE, S_OK};
 use winapi::um::dbgeng::{
     DebugConnectWide, IDebugClient, IDebugControl7, IDebugEventCallbacks, IID_IDebugClient,
-    IID_IDebugControl7, IID_IDebugRegisters2, DEBUG_EVENT_CHANGE_DEBUGGEE_STATE,
+    IID_IDebugControl7, IID_IDebugRegisters2, IID_IDebugSymbols5,
+    DEBUG_EVENT_CHANGE_DEBUGGEE_STATE,
 };
 
 use crate::dbgeng::control::DebugControl;
-use crate::dbgeng::event::DebugEventInterestFlags;
+use crate::dbgeng::event_callbacks::DebugEventInterestFlags;
 use crate::dbgeng::{DebugEventCallbacks, WinDbgError};
 
-use super::{event::WinDbgEvent, registers::Registers};
-
+use super::{event_callbacks::WinDbgEvent, registers::Registers};
+use crate::dbgeng::symbols::DebugSymbols;
 
 #[derive(Clone)]
 pub struct DebugClient<'a> {
@@ -23,7 +24,6 @@ pub struct DebugClient<'a> {
 }
 
 unsafe impl<'a> Send for DebugClient<'a> {}
-
 
 impl<'a> DebugClient<'a> {
     /// Connect to a remote debug server and join an existing debugging session. The debugger
@@ -35,8 +35,8 @@ impl<'a> DebugClient<'a> {
     ///     tcp:Port=3333,Server=localhost
     ///     npipe:Pipe=DbgX_35d0e593f3bd46c0900717235f6fd973
     pub fn connect<S>(connection_string: S) -> Result<DebugClient<'a>, WinDbgError>
-        where
-            S: AsRef<str>,
+    where
+        S: AsRef<str>,
     {
         let host: Vec<u16> = OsString::from(connection_string.as_ref())
             .encode_wide()
@@ -83,6 +83,10 @@ impl<'a> DebugClient<'a> {
         }
 
         rx
+    }
+
+    pub fn symbols(&'a self) -> Result<DebugSymbols<'a>, WinDbgError> {
+        Ok(DebugSymbols::new(self.query_interface(IID_IDebugSymbols5)?))
     }
 
     pub fn control(&'a self) -> Result<DebugControl<'a>, WinDbgError> {

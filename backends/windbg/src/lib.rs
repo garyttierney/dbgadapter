@@ -3,13 +3,10 @@ use futures::StreamExt;
 use log::info;
 use tokio::sync::mpsc::{Receiver, Sender};
 
-
 use ghidradbg_backend::command::{
-    dispatch_with, DebuggerCommandRequest,
-    DebuggerCommandResponse, SingleStep,
+    dispatch_with, DebuggerCommandRequest, DebuggerCommandResponse, SingleStep,
 };
 use ghidradbg_backend::{Debugger, DebuggerError, DebuggerEvent, Result};
-
 
 use crate::dbgeng::DebugClient;
 use crate::dbgeng::DebugEventInterestFlags;
@@ -26,7 +23,8 @@ pub struct WinDbg {
     events: Receiver<DebuggerEvent>,
     command_requests: Sender<DebuggerCommandRequest>,
     command_responses: Receiver<DebuggerCommandResponse>,
-    debugger_thread: std::thread::JoinHandle<Result<()>>,
+    debugger_thread: Option<std::thread::JoinHandle<Result<()>>>,
+    exit: tokio::sync::oneshot::Receiver<()>,
 }
 
 async fn windbg_event_loop(
@@ -38,9 +36,10 @@ async fn windbg_event_loop(
     let mut client = DebugClient::connect(connection.as_str())?;
     let mut windbg_events = client.events(DebugEventInterestFlags::CHANGE_DEBUGGEE_STATE);
 
+    info!("Connected to windbg successfully");
+
     loop {
         client.dispatch_callbacks()?;
-
         let read_timeout = Duration::from_millis(50);
         let next_event = timeout(read_timeout, windbg_events.next());
         let next_command = timeout(read_timeout, command_requests.next());
@@ -81,24 +80,30 @@ impl Debugger for WinDbg {
         let (command_response_tx, command_response_rx) = mpsc::channel(1);
         let (command_tx, command_rx) = mpsc::channel(1);
         let (event_tx, event_rx) = mpsc::channel(10);
+        let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
 
         let mut rt = tokio::runtime::Runtime::new()?;
         let cli = cli;
 
         // The WinDbg COM API MUST only be used on the same thread the object was created on.
         let debugger_thread = std::thread::spawn(move || {
-            rt.block_on(async move {
-                windbg_event_loop(cli, event_tx, command_rx, command_response_tx).await
-            })
-        });
+            let res = rt.block_on(async move {
+                let res = windbg_event_loop(cli, event_tx, command_rx, command_response_tx).await;
+                let _ = exit_tx.send(());
 
-        info!("Connected to windbg successfully");
+                res
+            });
+
+            rt.shutdown_background();
+            res
+        });
 
         Ok(Self {
             events: event_rx,
             command_requests: command_tx,
             command_responses: command_response_rx,
-            debugger_thread,
+            exit: exit_rx,
+            debugger_thread: Some(debugger_thread),
         })
     }
 
@@ -114,6 +119,27 @@ impl Debugger for WinDbg {
     }
 
     async fn next_event(&mut self) -> Result<DebuggerEvent> {
-        self.events.next().await.ok_or(DebuggerError::TargetExited)
+        let events = &mut self.events;
+        let exit = &mut self.exit;
+
+        if self.debugger_thread.is_none() {
+            return Err(DebuggerError::TargetExited);
+        }
+
+        let res = tokio::select! {
+            event = events.next() => {
+                event.ok_or(DebuggerError::TargetExited)
+            }
+            _ = exit => {
+                Err(DebuggerError::TargetExited)
+            }
+        };
+
+        if let Err(e) = res {
+            let debugger_thread = self.debugger_thread.take().unwrap();
+            return Err(debugger_thread.join().unwrap().unwrap_err());
+        }
+
+        unimplemented!()
     }
 }

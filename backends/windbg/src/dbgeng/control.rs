@@ -1,9 +1,9 @@
 use crate::dbgeng::WinDbgError;
-use ghidradbg_backend::state::{StackFrame, StackTrace};
+use ghidradbg_backend::state::{StackFrame, StackTrace, Value};
 use winapi::shared::winerror::FAILED;
 use winapi::um::dbgeng::{
-    IDebugControl7, DEBUG_STATUS_BREAK, DEBUG_STATUS_GO,
-    DEBUG_STATUS_STEP_BRANCH, DEBUG_STATUS_STEP_INTO, DEBUG_STATUS_STEP_OVER,
+    IDebugControl7, DEBUG_STATUS_BREAK, DEBUG_STATUS_GO, DEBUG_STATUS_STEP_BRANCH,
+    DEBUG_STATUS_STEP_INTO, DEBUG_STATUS_STEP_OVER,
 };
 
 #[repr(u32)]
@@ -23,6 +23,21 @@ pub struct DebugControl<'a> {
 impl<'a> DebugControl<'a> {
     pub fn new(inner: &'a mut IDebugControl7) -> Self {
         Self { inner }
+    }
+
+    pub fn set_execution_status(&self, status: DebuggerExecutionStatus) -> Result<(), WinDbgError> {
+        unsafe {
+            let error = self.inner.SetExecutionStatus(status as _);
+
+            if FAILED(error) {
+                return Err(WinDbgError::FfiError(
+                    "Unable to set execution status",
+                    error,
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     pub fn execution_status(&self) -> Result<DebuggerExecutionStatus, WinDbgError> {
@@ -66,7 +81,16 @@ impl<'a> DebugControl<'a> {
             frames.set_len(frames_filled as usize);
             frames
                 .into_iter()
-                .map(|frame| StackFrame::new(frame.InstructionOffset, frame.ReturnOffset))
+                .map(|frame| {
+                    let params: Vec<Value> = frame.Params.iter().map(|p| Value::from(*p)).collect();
+
+                    StackFrame::new(
+                        frame.FrameNumber,
+                        frame.InstructionOffset,
+                        frame.ReturnOffset,
+                        params,
+                    )
+                })
                 .collect()
         };
 

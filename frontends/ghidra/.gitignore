@@ -1,0 +1,10 @@
+/dist/
+/target/
+/build/
+/os/
+/lib/
+
+.gradle
+.idea
+*.class
+*.swp

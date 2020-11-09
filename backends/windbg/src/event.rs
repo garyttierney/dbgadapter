@@ -1,8 +1,8 @@
 use ghidradbg_backend::{DebuggerEvent, Result};
 pub use state_change::*;
 
+use crate::dbgeng::event_callbacks::WinDbgEvent;
 use crate::dbgeng::DebugClient;
-use crate::dbgeng::event::WinDbgEvent;
 
 mod state_change;
 

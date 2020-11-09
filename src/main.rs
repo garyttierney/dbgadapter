@@ -3,18 +3,17 @@ use std::env;
 use bytes::{BufMut, BytesMut};
 use env_logger::Env;
 use futures::{SinkExt, TryStreamExt};
-use log::{info, error};
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncBufReadExt;
 use tokio::prelude::{AsyncRead, AsyncWrite};
 use tokio::stream::StreamExt;
 use tokio_util::codec::{Encoder, FramedWrite};
 
+use ghidradbg_backend::command::{DebuggerCommandRequest, DebuggerCommandResponse};
 use ghidradbg_backend::{Debugger, DebuggerError, DebuggerEvent, Result};
-use ghidradbg_backend::command::{
-    DebuggerCommandRequest, DebuggerCommandResponse,
-};
 use ghidradbg_backend_windbg::WinDbg;
+use tokio::time::Duration;
 
 pub struct WireResponseEncoder;
 
@@ -22,7 +21,7 @@ pub struct WireResponseEncoder;
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub enum WireResponse {
-    Command(DebuggerCommandResponse),
+    Command { response: DebuggerCommandResponse },
 
     Notification { event: DebuggerEvent },
 }
@@ -44,10 +43,10 @@ async fn debug_loop<Dbg, In, Out>(
     input_reader: In,
     output_writer: Out,
 ) -> Result<()>
-    where
-        Dbg: Debugger,
-        In: AsyncRead + Unpin,
-        Out: AsyncWrite + Unpin,
+where
+    Dbg: Debugger,
+    In: AsyncRead + Unpin,
+    Out: AsyncWrite + Unpin,
 {
     let mut debugger = Dbg::launch(command_line.to_string()).await?;
     let mut input = tokio::io::BufReader::new(input_reader)
@@ -62,14 +61,17 @@ async fn debug_loop<Dbg, In, Out>(
 
     loop {
         tokio::select! {
-            event = debugger.next_event() => {
-                output.send(WireResponse::Notification{event: event?}).await?;
-            }
+            event = debugger.next_event() => match event {
+                Ok(event) => output.send(WireResponse::Notification { event }).await?,
+                Err(e) => {
+                    return Err(e)
+                }
+            },
             input = input.next() => match input {
                 Some(Ok(cmd)) =>  {
                     let response = debugger.handle_command(cmd).await?;
 
-                    output.send(WireResponse::Command(response)).await?;
+                    output.send(WireResponse::Command { response }).await?;
                 },
                 _ => break
             }
@@ -79,8 +81,7 @@ async fn debug_loop<Dbg, In, Out>(
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let mut args = env::args();
@@ -93,20 +94,35 @@ async fn main() -> Result<()> {
         }
     };
 
+    let mut runtime = tokio::runtime::Builder::new()
+        .basic_scheduler()
+        .enable_all()
+        .build()
+        .unwrap();
 
-    let input = tokio::io::stdin();
-    let output = tokio::io::stdout();
+    let result = runtime.block_on(async {
+        let input = tokio::io::stdin();
+        let output = tokio::io::stdout();
 
-    let debugger_task = match debugger.to_lowercase().as_str() {
-        #[cfg(feature = "windbg")]
-        "windbg" | "win_dbg" => debug_loop::<WinDbg, _, _>(&debugger_args, input, output),
-        _ => {
-            error!("{} is not a supported debugger backend", debugger);
-            panic!()
-        }
-    };
+        let debugger_task = match debugger.to_lowercase().as_str() {
+            #[cfg(feature = "windbg")]
+            "windbg" | "win_dbg" => debug_loop::<WinDbg, _, _>(&debugger_args, input, output),
+            _ => {
+                error!("{} is not a supported debugger backend", debugger);
+                panic!()
+            }
+        };
 
-    info!("Connecting to {} on {}", debugger, debugger_args);
+        info!("Using {}, args={}", debugger, debugger_args);
 
-    Ok(debugger_task.await?)
+        debugger_task.await
+    });
+
+    if let Err(e) = result {
+        error!("Debugger exited with error: {}", e);
+    }
+
+    runtime.shutdown_timeout(Duration::from_secs(5));
+
+    Ok(())
 }

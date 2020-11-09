@@ -1,9 +1,9 @@
 use std::os::raw::{c_long, c_ulong};
-use std::{ptr};
+use std::ptr;
 
+use ghidradbg_backend::DebuggerError;
 use winapi::shared::winerror::HRESULT;
 use winapi::um::winbase::*;
-use ghidradbg_backend::DebuggerError;
 
 impl From<WinDbgError> for DebuggerError {
     fn from(error: WinDbgError) -> Self {

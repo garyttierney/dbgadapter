@@ -1,7 +1,6 @@
-use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::{from_value, to_value, Value};
-
 
 use crate::Result;
 
@@ -14,13 +13,15 @@ pub trait DebuggerCommand: Sized {
 #[derive(Serialize, Deserialize)]
 pub struct DebuggerCommandRequest {
     id: u64,
-    ty: String,
     command: Value,
 }
 
 impl DebuggerCommandRequest {
     pub fn ty(&self) -> &str {
-        &self.ty
+        self.command
+            .as_object()
+            .and_then(|obj| obj.get("type")?.as_str())
+            .expect("Invalid command value")
     }
 }
 
@@ -28,7 +29,6 @@ impl DebuggerCommandRequest {
 #[serde(rename_all = "snake_case")]
 pub struct DebuggerCommandResponse {
     request_id: u64,
-    request_ty: String,
     response: Value,
 }
 
@@ -40,17 +40,17 @@ pub struct DebuggerCommandDispatcher<'a, Cx> {
 
 impl<'a, Cx> DebuggerCommandDispatcher<'a, Cx> {
     pub fn on<R>(&mut self, handler: fn(&mut Cx, R) -> Result<R::Response>) -> Result<&mut Self>
-        where
-            R: DebuggerCommand + DeserializeOwned + 'static,
-            R::Response: Serialize + 'static,
+    where
+        R: DebuggerCommand + DeserializeOwned + 'static,
+        R::Response: Serialize + 'static,
     {
-        if self.result.is_none() && self.request.ty == R::TYPE {
+        let ty = self.request.ty();
+        if self.result.is_none() && self.request.ty() == R::TYPE {
             let cmd = from_value(self.request.command.clone()).unwrap();
             let result = handler(self.context, cmd)?;
 
             self.result = Some(DebuggerCommandResponse {
                 request_id: self.request.id,
-                request_ty: self.request.ty.clone(),
                 response: to_value(result).unwrap(),
             })
         }
@@ -59,11 +59,15 @@ impl<'a, Cx> DebuggerCommandDispatcher<'a, Cx> {
     }
 }
 
-pub fn dispatch_with<Cx>(context: &mut Cx, request: DebuggerCommandRequest, handler_chain: fn(&mut DebuggerCommandDispatcher<Cx>) -> Result<()>) -> Result<Option<DebuggerCommandResponse>> {
+pub fn dispatch_with<Cx>(
+    context: &mut Cx,
+    request: DebuggerCommandRequest,
+    handler_chain: fn(&mut DebuggerCommandDispatcher<Cx>) -> Result<()>,
+) -> Result<Option<DebuggerCommandResponse>> {
     let mut dispatcher = DebuggerCommandDispatcher {
         context,
         request,
-        result: None
+        result: None,
     };
 
     handler_chain(&mut dispatcher)?;

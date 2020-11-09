@@ -233,7 +233,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
- "winapi 0.3.9",
+ "winapi 0.3.9 (git+https://github.com/garyttierney/winapi-rs?branch=dbgeng)",
 ]
 
 [[package]]
@@ -659,9 +659,10 @@ checksum = "167dc9d6949a9b857f3451275e911c3f44255842c1f7a76f33c55103a909087a"
 [[package]]
 name = "winapi"
 version = "0.3.9"
+source = "git+https://github.com/garyttierney/winapi-rs?branch=dbgeng#024966ac5dcc7468639fe032791b369f39a0b502"
 dependencies = [
- "winapi-i686-pc-windows-gnu 0.4.0",
- "winapi-x86_64-pc-windows-gnu 0.4.0",
+ "winapi-i686-pc-windows-gnu 0.4.0 (git+https://github.com/garyttierney/winapi-rs?branch=dbgeng)",
+ "winapi-x86_64-pc-windows-gnu 0.4.0 (git+https://github.com/garyttierney/winapi-rs?branch=dbgeng)",
 ]
 
 [[package]]
@@ -683,6 +684,7 @@ checksum = "2d315eee3b34aca4797b2da6b13ed88266e6d612562a0c46390af8299fc699bc"
 [[package]]
 name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
+source = "git+https://github.com/garyttierney/winapi-rs?branch=dbgeng#024966ac5dcc7468639fe032791b369f39a0b502"
 
 [[package]]
 name = "winapi-i686-pc-windows-gnu"
@@ -702,6 +704,7 @@ dependencies = [
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
+source = "git+https://github.com/garyttierney/winapi-rs?branch=dbgeng#024966ac5dcc7468639fe032791b369f39a0b502"
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"

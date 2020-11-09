@@ -1,0 +1,4 @@
+[target.x86_64-pc-windows-msvc.dbgeng]
+rustc-link-lib = ["dbgeng"]
+rustc-link-search = ["C:/Program Files (x86)/Windows Kits/10/Debuggers/x64"]
+root              = "C:/Program Files (x86)/Windows Kits/10/Debuggers/x64"
