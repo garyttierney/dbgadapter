@@ -1,118 +1,73 @@
 package com.github.garyttierney.ghidradbg.client
 
-import com.github.garyttierney.ghidradbg.client.launcher.*
+import com.github.garyttierney.ghidradbg.client.message.DebuggerCommand
 import com.github.garyttierney.ghidradbg.client.message.DebuggerCommandRequest
 import com.github.garyttierney.ghidradbg.client.message.DebuggerCommandResponse
 import com.github.garyttierney.ghidradbg.client.message.DebuggerNotification
-import com.github.garyttierney.ghidradbg.plugin.DebuggerConnection
-import com.github.garyttierney.ghidradbg.plugin.DebuggerEventListener
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.*
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.channels.onReceiveOrNull
+import kotlinx.coroutines.isActive
 import kotlinx.serialization.json.Json
-import java.util.concurrent.Executors
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.selects.select
 
-class DebuggerClient : DebuggerEventProducer, DebuggerCommandDispatcher {
+class DebuggerClient(
+    private val coroutineScope: CoroutineScope,
+    private val commands: SendChannel<DebuggerCommandRequest>,
+    private val notifications: ReceiveChannel<DebuggerNotification>,
+    private val logs: ReceiveChannel<String>,
+    private val listener: DebuggerEventListener
+) : DebuggerCommandDispatcher {
 
     private val commandContinuations = mutableMapOf<Long, Continuation<DebuggerCommandResponse>>()
     private var commandSequence: Long = 0
-    private val commands = Channel<DebuggerCommandRequest>(10)
-    private val notifications = Channel<DebuggerNotification>(1)
 
-    val isRunning: Boolean
-        get() = activeJob?.isActive ?: false
+    val isActive
+        get() = coroutineScope.isActive
 
-    private val workExecutor = CoroutineScope(Executors.newFixedThreadPool(3).asCoroutineDispatcher())
-    private val listeners = mutableListOf<DebuggerEventListener>()
-    private var activeJob: Job? = null
+    @OptIn(ExperimentalCoroutinesApi::class)
+    suspend fun run() {
+        while (isActive) {
+            select<Unit> {
+                notifications.onReceiveOrNull { notification ->
+                    when (notification) {
+                        is DebuggerNotification.Event -> listener.onDebuggerEvent(notification.event)
+                        is DebuggerNotification.Command -> {
+                            val response = notification.response
+                            val id = response.requestId
+                            val continuation = commandContinuations.remove(id)
 
-    private suspend fun withListeners(callback: suspend DebuggerEventListener.() -> Unit) {
-        for (listener in listeners) {
-            listener.callback()
-        }
-    }
+                            continuation?.resume(notification.response)
+                        }
+                        null -> shutdown()
+                    }
+                }
 
-
-    private fun whileAliveRunInPool(process: Process, runnable: suspend CoroutineScope.() -> Boolean) {
-        workExecutor.launch {
-            while (process.isAlive) {
-                if (!runnable()) {
-                    break
+                logs.onReceiveOrNull { logMessage ->
+                    logMessage?.let { listener.onLogMessage(logMessage) } ?: shutdown()
                 }
             }
         }
     }
 
-    fun runWithScope(executable: String, connection: DebuggerConnection, scope: CoroutineScope) {
-        activeJob?.cancel()
-        activeJob = scope.launch {
-            run(executable, connection)
-        }
+    fun shutdown() {
+        coroutineScope.cancel()
     }
 
-    @Suppress("BlockingMethodInNonBlockingContext")
-    suspend fun run(executable: String, connection: DebuggerConnection) {
-        val proc = DebuggerClientLauncher.launch("ghidra-dbg", connection.type.id, connection.options)
-        val errors = proc.errorStream.bufferedReader()
-        val input = proc.inputStream.bufferedReader()
-        val output = proc.outputStream.bufferedWriter()
+    override suspend fun dispatch(command: DebuggerCommand<*>): DebuggerCommandResponse {
+        val request = DebuggerCommandRequest(commandSequence++, Json.encodeToJsonElement(command))
 
-        whileAliveRunInPool(proc) {
-            val next = errors.readLine() ?: return@whileAliveRunInPool false
-            withListeners { onLogMessage(next) }
-
-            true
-        }
-
-        whileAliveRunInPool(proc) {
-            val next = input.readLine() ?: return@whileAliveRunInPool false
-            notifications.send(Json.decodeFromString(next))
-
-            true
-        }
-
-        whileAliveRunInPool(proc) {
-            for (cmd in commands) {
-                output.write(Json.encodeToString(cmd))
-            }
-
-            true
-        }
-
-        for (notification in notifications) {
-            if (notification is DebuggerNotification.Event) {
-                when (val event = notification.event) {
-                    is DebuggeeStateChange -> withListeners { onDebuggeeStateChange(event) }
-                }
-            } else if (notification is DebuggerNotification.Command) {
-                val response = notification.response
-                val id = response.requestId
-                val continuation = commandContinuations.remove(id)
-
-                continuation?.resume(notification.response)
-            }
-        }
-    }
-
-    override fun nextCommandSequence() = commandSequence++
-
-    override suspend fun dispatch(request: DebuggerCommandRequest): DebuggerCommandResponse {
         commands.send(request)
 
         return suspendCoroutine {
             commandContinuations[request.id] = it
         }
-    }
-
-    override fun addEventListener(listener: DebuggerEventListener) {
-        listeners.add(listener)
-    }
-
-    override fun removeEventListener(listener: DebuggerEventListener) {
-        listeners.remove(listener)
     }
 }

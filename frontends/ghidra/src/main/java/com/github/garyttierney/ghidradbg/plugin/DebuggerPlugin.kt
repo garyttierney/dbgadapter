@@ -1,7 +1,10 @@
 package com.github.garyttierney.ghidradbg.plugin
 
+import com.github.garyttierney.ghidradbg.client.Debugger
 import com.github.garyttierney.ghidradbg.client.DebuggerClient
+import com.github.garyttierney.ghidradbg.client.DebuggerEventListener
 import com.github.garyttierney.ghidradbg.plugin.ui.DebuggerComponentProvider
+import com.github.garyttierney.ghidradbg.plugin.ui.action.StopDebuggerAction
 import com.github.garyttierney.ghidradbg.plugin.ui.action.step.SingleStepAction
 import com.github.garyttierney.ghidradbg.program.DebuggedProgramStateChangeListener
 import com.github.garyttierney.ghidradbg.program.DebuggedProgramStateProvider
@@ -28,7 +31,7 @@ import ghidra.program.model.listing.Program
 class DebuggerPlugin(tool: PluginTool) : ProgramPlugin(tool, false, false) {
 
     private val programListeners = mutableMapOf<Program, DebuggerEventListener>()
-    private val debugger = DebuggerImpl(DebuggerClient())
+    private val debugger = DebuggerImpl()
 
     private lateinit var console: ConsoleService
     private lateinit var goTo: GoToService
@@ -76,6 +79,7 @@ class DebuggerPlugin(tool: PluginTool) : ProgramPlugin(tool, false, false) {
     companion object {
         private val actions : List<DebuggerPlugin.() -> DockingAction> = listOf(
             { SingleStepAction(debugger, name ) },
+            { StopDebuggerAction(debugger, name) }
         )
     }
 }

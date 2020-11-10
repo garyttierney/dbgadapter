@@ -42,6 +42,10 @@ dependencies {
 }
 
 tasks {
+    withType<KotlinCompile> {
+        kotlinOptions.freeCompilerArgs += "-Xopt-in=kotlin.RequiresOptIn"
+    }
+
     withType<CargoBuildTask> {
         doLast {
             copy {
@@ -91,5 +95,3 @@ fun platformName(): String {
         else -> error("Unsupported platform: ${os}-${arch}")
     }
 }
-
-val compileKotlin: KotlinCompile by tasks

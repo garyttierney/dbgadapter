@@ -1,7 +1,8 @@
 package com.github.garyttierney.ghidradbg.program
 
+import com.github.garyttierney.ghidradbg.client.DebuggerEventListener
 import com.github.garyttierney.ghidradbg.client.launcher.DebuggeeStateChange
-import com.github.garyttierney.ghidradbg.plugin.DebuggerEventListener
+import com.github.garyttierney.ghidradbg.client.launcher.DebuggerEvent
 import ghidra.app.cmd.register.SetRegisterCmd
 import ghidra.app.plugin.core.analysis.AutoAnalysisManager
 import ghidra.app.services.GoToService
@@ -17,7 +18,12 @@ class DebuggedProgramStateChangeListener(
 ) :
     DebuggerEventListener {
 
-    override suspend fun onDebuggeeStateChange(change: DebuggeeStateChange) {
+    override suspend fun onDebuggerEvent(event: DebuggerEvent) = when (event) {
+        is DebuggeeStateChange -> stateChanged(event)
+        else -> Unit
+    }
+
+    private fun stateChanged(change: DebuggeeStateChange) {
         val startAddress = program.imageBase.addNoWrap(change.instructionOffset.displacement)
         val function = program.functionManager.getFunctionAt(startAddress)
 
